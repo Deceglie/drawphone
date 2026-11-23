@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Drawphone — Pass &amp; Play</title>
+  <style>
+    :root { --ink:#172033; --paper:#fffaf1; --blue:#2457d6; --pink:#ef6a78; --yellow:#ffd166; --green:#34a853; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--paper); color:var(--ink); font-family:ui-rounded,"Nunito",system-ui,-apple-system,sans-serif; }
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    .app { width:min(100%, 620px); min-height:100vh; margin:auto; padding:18px 18px calc(18px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; }
+    header { display:flex; align-items:center; justify-content:center; gap:10px; margin:4px 0 18px; }
+    .logo { font-size:clamp(32px,9vw,48px); font-weight:900; letter-spacing:-2px; }
+    .logo span { color:var(--pink); }
+    .card { background:white; border:3px solid var(--ink); border-radius:20px; box-shadow:6px 6px 0 var(--ink); padding:20px; }
+    .screen { display:none; }
+    .screen.active { display:block; }
+    h1,h2,h3,p { margin-top:0; }
+    #players-heading { margin-top:22px; }
+    h2 { font-size:clamp(25px,7vw,36px); }
+    .muted { color:#667085; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .row > * { flex:1; }
+    label { display:block; font-weight:800; margin:12px 0 6px; }
+    input { width:100%; border:2px solid #ccd1dc; border-radius:12px; padding:13px 14px; background:#fff; }
+    input:focus { outline:4px solid #dce7ff; border-color:var(--blue); }
+    select { width:100%; border:2px solid #ccd1dc; border-radius:12px; padding:13px 14px; background:#fff; }
+    .primary,.secondary { width:100%; border:3px solid var(--ink); border-radius:14px; min-height:54px; font-weight:900; box-shadow:4px 4px 0 var(--ink); margin-top:14px; }
+    .primary { background:var(--yellow); }
+    .secondary { background:#fff; }
+    button:active { transform:translate(3px,3px); box-shadow:1px 1px 0 var(--ink); }
+    .name-grid { display:grid; gap:8px; }
+    .handoff { text-align:center; padding:30px 20px 24px; }
+    .handoff-icon { width:92px; height:92px; margin:0 auto 18px; border-radius:50%; display:grid; place-items:center; background:#dfe8ff; border:3px solid var(--ink); font-size:42px; }
+    .handoff h2 { margin-bottom:8px; }
+    .progress { height:8px; border-radius:99px; background:#e7e9ef; overflow:hidden; margin:12px 0 18px; }
+    .progress > div { height:100%; background:var(--pink); width:0; transition:.2s; }
+    .prompt { text-align:center; font-size:clamp(28px,8vw,42px); font-weight:900; margin:18px 0; overflow-wrap:anywhere; }
+    .draw-wrap { background:white; border:3px solid var(--ink); border-radius:16px; overflow:hidden; touch-action:none; }
+    canvas { display:block; width:100%; aspect-ratio:1; touch-action:none; background:white; }
+    .tools { display:flex; gap:8px; margin-top:10px; }
+    .tool { flex:1; border:2px solid var(--ink); border-radius:10px; background:white; min-height:44px; }
+    .color { width:56px; height:44px; border:2px solid var(--ink); border-radius:10px; padding:4px; }
+    .previous-drawing { display:block; width:100%; max-height:320px; object-fit:contain; border:3px solid var(--ink); border-radius:16px; background:white; }
+    .results { display:grid; gap:14px; }
+    .result-card { border:3px solid var(--ink); border-radius:16px; background:white; overflow:hidden; }
+    .result-card h3 { margin:0; padding:12px 14px; background:var(--yellow); border-bottom:3px solid var(--ink); }
+    .chain { padding:14px; }
+    .chain-item { margin:0 0 14px; text-align:center; }
+    .chain-item:last-child { margin-bottom:0; }
+    .chain-item small { display:block; color:#667085; margin-bottom:4px; }
+    .chain-item strong { font-size:22px; }
+    .chain-selector { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+    .chain-selector button { min-height:44px; border:2px solid var(--ink); border-radius:10px; background:white; font-weight:800; }
+    .chain-selector button.active { background:var(--yellow); }
+    .reveal-card { min-height:220px; display:flex; flex-direction:column; justify-content:center; text-align:center; }
+    .reveal-card img { max-height:360px; }
+    .reveal-progress { text-align:center; color:#667085; margin:10px 0 0; }
+    .chain-item img { width:100%; max-height:300px; object-fit:contain; border:2px solid #dfe3ea; border-radius:12px; }
+    .pager { display:flex; gap:10px; }
+    .hidden { display:none !important; }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header><div class="logo">Draw<span>phone</span></div></header>
+
+    <section id="setup" class="screen active">
+      <div class="card">
+        <h2>Pass &amp; Play</h2>
+        <p class="muted">No accounts, no internet, no bots. One phone gets passed around.</p>
+        <label for="game-mode">Game mode</label>
+        <select id="game-mode">
+          <option value="parallel">Parallel — every player does every turn</option>
+          <option value="single" selected>Single chain — pass one chain around the group</option>
+        </select>
+        <label for="player-count">Number of players</label>
+        <select id="player-count"><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select>
+        <h3 id="players-heading">Players</h3>
+        <div id="names" class="name-grid"></div>
+        <button id="start" class="primary">Start game</button>
+      </div>
+    </section>
+
+    <section id="handoff" class="screen">
+      <div class="card handoff">
+        <div class="progress"><div id="progress-bar"></div></div>
+        <div class="handoff-icon">📱</div>
+        <h2>Pass to <span id="handoff-name"></span></h2>
+        <p id="handoff-help" class="muted">Keep the prompt secret.</p>
+        <button id="ready" class="primary">I'm ready</button>
+      </div>
+    </section>
+
+    <section id="action" class="screen">
+      <div class="card">
+        <div class="progress"><div id="action-progress"></div></div>
+        <h3 id="turn-label"></h3>
+        <div id="prompt-panel">
+          <p class="muted">Write something another player can draw.</p>
+          <input id="prompt-input" maxlength="80" placeholder="A sleepy raccoon..." autocomplete="off">
+        </div>
+        <div id="guess-panel" class="hidden">
+          <img id="guess-image" class="previous-drawing" alt="Drawing from the previous player">
+          <label for="guess-input">What is it?</label>
+          <input id="guess-input" maxlength="80" placeholder="Type your guess" autocomplete="off">
+        </div>
+        <div id="draw-panel" class="hidden">
+          <p>Draw this:</p>
+          <div class="prompt" id="draw-word"></div>
+          <div class="draw-wrap"><canvas id="drawing" width="600" height="600"></canvas></div>
+          <div class="tools">
+            <input id="color" class="color" type="color" value="#172033" aria-label="Pen color">
+            <button id="undo" class="tool">Undo</button>
+            <button id="clear" class="tool">Clear</button>
+          </div>
+        </div>
+        <button id="done" class="primary">Done — pass the phone</button>
+      </div>
+    </section>
+
+    <section id="results" class="screen">
+      <div id="results-list" class="results"></div>
+      <button id="next-chain" class="primary hidden">Start next chain</button>
+      <button id="play-again" class="primary">Play again</button>
+      <button id="new-players" class="secondary">Change players</button>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const screens = ['setup','handoff','action','results'];
+    function show(id) {
+      screens.forEach(name => $(name).classList.toggle('active', name === id));
+      window.scrollTo(0, 0);
+    }
+
+    let names = [];
+    let tasks = [];
+    let taskIndex = 0;
+    let chains = [];
+    let gameMode = 'parallel';
+    let starterIndex = 0;
+    function renderNames() {
+      const count = Number($('player-count').value);
+      const grid = $('names');
+      grid.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const input = document.createElement('input');
+        input.id = `name-${i}`;
+        input.maxLength = 20;
+        input.placeholder = `Player ${i + 1}`;
+        input.value = names[i] || `Player ${i + 1}`;
+        input.setAttribute('aria-label', `Name for player ${i + 1}`);
+        grid.appendChild(input);
+      }
+    }
+
+    $('player-count').addEventListener('change', renderNames);
+    renderNames();
+
+    function getNames() {
+      const count = Number($('player-count').value);
+      return Array.from({length: count}, (_, i) => {
+        const value = $(`name-${i}`).value.trim();
+        return value || `Player ${i + 1}`;
+      });
+    }
+
+    function buildTasks() {
+      tasks = [];
+      for (let i = 0; i < names.length; i++) {
+        tasks.push({ kind:'prompt', player:i, chain:i });
+      }
+      for (let step = 1; step < names.length; step++) {
+        for (let chain = 0; chain < names.length; chain++) {
+          const player = (chain - step + names.length) % names.length;
+          tasks.push({ kind: step % 2 === 1 ? 'draw' : 'guess', player, chain, step });
+        }
+      }
+    }
+
+    function buildSingleChainTasks() {
+      tasks = [{ kind:'prompt', player:starterIndex, chain:0 }];
+      for (let step = 1; step < names.length; step++) {
+        tasks.push({
+          kind: step % 2 === 1 ? 'draw' : 'guess',
+          player: (starterIndex + step) % names.length,
+          chain: 0,
+          step
+        });
+      }
+    }
+
+    $('start').addEventListener('click', () => {
+      names = getNames();
+      gameMode = $('game-mode').value;
+      taskIndex = 0;
+      starterIndex = 0;
+      if (gameMode === 'single') {
+        chains = [{ owner:starterIndex, name:names[starterIndex], links:[] }];
+        buildSingleChainTasks();
+      } else {
+        chains = names.map((name, i) => ({ owner:i, name, links:[] }));
+        buildTasks();
+      }
+      showHandoff();
+    });
+
+    function showHandoff() {
+      if (taskIndex >= tasks.length) { showResults(); return; }
+      const task = tasks[taskIndex];
+      $('handoff-name').textContent = names[task.player];
+      $('handoff-help').textContent = task.kind === 'prompt'
+        ? 'Write a secret starting phrase.'
+        : 'Only this player should look at the phone.';
+      $('progress-bar').style.width = `${(taskIndex / tasks.length) * 100}%`;
+      show('handoff');
+    }
+
+    $('ready').addEventListener('click', showAction);
+    function showAction() {
+      const task = tasks[taskIndex];
+      $('turn-label').textContent = `${names[task.player]} · Turn ${taskIndex + 1} of ${tasks.length}`;
+      $('action-progress').style.width = `${((taskIndex + 1) / tasks.length) * 100}%`;
+      $('prompt-panel').classList.add('hidden');
+      $('guess-panel').classList.add('hidden');
+      $('draw-panel').classList.add('hidden');
+
+      if (task.kind === 'prompt') {
+        $('prompt-panel').classList.remove('hidden');
+        $('prompt-input').value = '';
+        setTimeout(() => $('prompt-input').focus(), 50);
+      } else if (task.kind === 'draw') {
+        const previous = chains[task.chain].links[task.step - 1];
+        $('draw-word').textContent = previous.text;
+        $('draw-panel').classList.remove('hidden');
+        setupCanvas();
+      } else {
+        const previous = chains[task.chain].links[task.step - 1];
+        $('guess-image').src = previous.data;
+        $('guess-input').value = '';
+        $('guess-panel').classList.remove('hidden');
+        setTimeout(() => $('guess-input').focus(), 50);
+      }
+      show('action');
+    }
+
+    let canvas, ctx, drawing = false, strokes = [];
+    function setupCanvas() {
+      canvas = $('drawing');
+      ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      strokes = [];
+      canvas.onpointerdown = (event) => {
+        canvas.setPointerCapture(event.pointerId);
+        drawing = true;
+        strokes.push(ctx.getImageData(0,0,canvas.width,canvas.height));
+        ctx.beginPath();
+        const p = point(event);
+        ctx.moveTo(p.x,p.y);
+      };
+      canvas.onpointermove = (event) => {
+        if (!drawing) return;
+        ctx.strokeStyle = $('color').value;
+        ctx.lineWidth = 10;
+        const p = point(event);
+        ctx.lineTo(p.x,p.y);
+        ctx.stroke();
+      };
+      canvas.onpointerup = canvas.onpointercancel = () => { drawing=false; ctx.closePath(); };
+    }
+    function point(event) {
+      const rect = canvas.getBoundingClientRect();
+      return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height };
+    }
+    $('undo').addEventListener('click', () => {
+      if (!strokes.length) return;
+      ctx.putImageData(strokes.pop(),0,0);
+    });
+    $('clear').addEventListener('click', () => {
+      strokes = [];
+      ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    });
+
+    $('done').addEventListener('click', () => {
+      const task = tasks[taskIndex];
+      if (task.kind === 'prompt') {
+        const text = $('prompt-input').value.trim();
+        if (!text) { alert('Enter a starting phrase first.'); return; }
+        chains[task.chain].links.push({ kind:'word', text, player:task.player });
+      } else if (task.kind === 'draw') {
+        if (canvasIsBlank()) { alert('Draw a picture first.'); return; }
+        chains[task.chain].links.push({ kind:'drawing', data:canvas.toDataURL('image/png'), player:task.player });
+      } else {
+        const text = $('guess-input').value.trim();
+        if (!text) { alert('Enter a guess first.'); return; }
+        chains[task.chain].links.push({ kind:'word', text, player:task.player });
+      }
+      taskIndex++;
+      showHandoff();
+    });
+
+    function canvasIsBlank() {
+      const pixels = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      for (let i=0;i<pixels.length;i+=4) {
+        if (pixels[i] < 250 || pixels[i+1] < 250 || pixels[i+2] < 250) return false;
+      }
+      return true;
+    }
+
+    function showResults() {
+      const list = $('results-list');
+      list.innerHTML = '';
+
+      let revealIndex = 0;
+      let selectedChain = 0;
+      let wholeChain = false;
+
+      if (chains.length > 1) {
+        const selector = document.createElement('div');
+        selector.className = 'chain-selector';
+        chains.forEach((chain, index) => {
+          const button = document.createElement('button');
+          button.textContent = `${index + 1}. ${chain.name}`;
+          button.addEventListener('click', () => {
+            selectedChain = index;
+            revealIndex = 0;
+            wholeChain = false;
+            Array.from(selector.children).forEach((child, i) => child.classList.toggle('active', i === index));
+            renderReveal();
+          });
+          if (index === 0) button.classList.add('active');
+          selector.appendChild(button);
+        });
+        list.appendChild(selector);
+      }
+
+      const card = document.createElement('article');
+      card.className = 'result-card';
+      const title = document.createElement('h3');
+      card.appendChild(title);
+      const body = document.createElement('div');
+      body.className = 'chain reveal-card';
+      card.appendChild(body);
+      list.appendChild(card);
+
+      function renderReveal() {
+        const chain = chains[selectedChain];
+        title.textContent = `${chain.name}'s chain`;
+        body.innerHTML = '';
+
+        if (wholeChain) {
+          chain.links.forEach((link, i) => body.appendChild(makeChainItem(link, i)));
+          body.classList.remove('reveal-card');
+        } else {
+          body.classList.add('reveal-card');
+          body.appendChild(makeChainItem(chain.links[revealIndex], revealIndex));
+          const progress = document.createElement('p');
+          progress.className = 'reveal-progress';
+          progress.textContent = `${revealIndex + 1} of ${chain.links.length}`;
+          body.appendChild(progress);
+        }
+
+        const wholeButton = document.getElementById('show-whole-chain');
+        wholeButton.textContent = wholeChain ? 'Reveal one at a time' : 'Show whole chain';
+        $('advance-reveal').textContent = revealIndex >= chain.links.length - 1 ? 'Start reveal again' : 'Next';
+      }
+
+      function makeChainItem(link, i) {
+        const item = document.createElement('div');
+        item.className = 'chain-item';
+        const attribution = i === 0 ? 'Started by' : (link.kind === 'drawing' ? 'Drew' : 'Guessed');
+        const small = document.createElement('small');
+        small.textContent = `${attribution} ${names[link.player]}`;
+        item.appendChild(small);
+        if (link.kind === 'drawing') {
+          const img = document.createElement('img');
+          img.src = link.data;
+          img.alt = `Drawing by ${names[link.player]}`;
+          item.appendChild(img);
+        } else {
+          const strong = document.createElement('strong');
+          strong.textContent = link.text;
+          item.appendChild(strong);
+        }
+        return item;
+      }
+
+      if (!$('show-whole-chain')) {
+        const controls = document.createElement('div');
+        controls.className = 'pager';
+        controls.innerHTML = '<button id="show-whole-chain" class="secondary">Show whole chain</button><button id="advance-reveal" class="primary">Next</button>';
+        list.appendChild(controls);
+      } else {
+        $('show-whole-chain').hidden = false;
+        $('advance-reveal').hidden = false;
+      }
+
+      $('show-whole-chain').onclick = () => {
+        wholeChain = !wholeChain;
+        renderReveal();
+      };
+      $('advance-reveal').onclick = () => {
+        const chain = chains[selectedChain];
+        wholeChain = false;
+        revealIndex = revealIndex >= chain.links.length - 1 ? 0 : revealIndex + 1;
+        renderReveal();
+      };
+
+      renderReveal();
+      $('next-chain').classList.toggle('hidden', gameMode !== 'single');
+      show('results');
+    }
+
+    $('next-chain').addEventListener('click', () => {
+      starterIndex = (starterIndex + 1) % names.length;
+      chains = [{ owner:starterIndex, name:names[starterIndex], links:[] }];
+      taskIndex = 0;
+      buildSingleChainTasks();
+      showHandoff();
+    });
+
+    $('play-again').addEventListener('click', () => {
+      names = getNames();
+      taskIndex = 0;
+      starterIndex = 0;
+      if (gameMode === 'single') {
+        chains = [{ owner:0, name:names[0], links:[] }];
+        buildSingleChainTasks();
+      } else {
+        chains = names.map((name,i) => ({owner:i,name,links:[]}));
+        buildTasks();
+      }
+      showHandoff();
+    });
+    $('new-players').addEventListener('click', () => show('setup'));
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && $('action').classList.contains('active')) {
+        event.preventDefault();
+        $('done').click();
+      }
+    });
+  </script>
+</body>
+</html>

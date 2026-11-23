@@ -1,22 +1,19 @@
-![Drawphone](https://i.imgur.com/UDwA90p.png)
+# Drawphone — Pass & Play
 
-### Play now at: [drawphone.tannerkrewson.com](https://drawphone.tannerkrewson.com/)
+A self-contained, pass-the-phone Drawphone game. It has no server, accounts, bots, or online services.
 
-Drawphone was built with Node.js, jQuery and [Pug](https://github.com/pugjs/pug). It was one of my first coding projects, so the code is a bit of a mess... 😂
+Choose **Parallel mode** to run every chain through all players at once, or **Single chain mode** to pass one chain around and reveal each completed chain before starting the next one. In single-chain mode, the starting player rotates after every chain.
 
-Issues, feature requests, and pull requests welcome!
 
-## Development
+## Play
 
-#### Instructions
+Open `index.html` directly in a browser, or serve the repository with any static web server.
 
-1. Clone the repo to get started
-2. Fork and create any pull requests against the `dev` branch
-3. (If needed) Install `node-canvas` dependencies: Drawphone uses [`node-canvas`](https://github.com/Automattic/node-canvas); on some OSes/processors, `npm` may attempt to compile/install it from source. See the `node-canvas` README for details.
-4. Run `npm install`, then `npm start` to launch the server
-5. Go to `localhost:3000` in your browser
+## GitHub Pages
 
-#### Tips
+1. Push this repository to the `main` branch.
+2. In GitHub repository settings, open **Pages**.
+3. Set **Source** to **GitHub Actions**.
+4. Run the **Deploy to GitHub Pages** workflow.
 
--   To change the default port, set the `PORT` environment variable
--   If you set the `NODE_ENV` environment variable to `development`, you can use the link `localhost:3000/dev` to automatically join game `ffff`. This is helpful for speeding up debugging.
+The included workflow deploys the repository root, with `index.html` as the game page.
