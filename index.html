@@ -38,8 +38,8 @@
     .progress { height:8px; border-radius:99px; background:#e7e9ef; overflow:hidden; margin:12px 0 18px; }
     .progress > div { height:100%; background:var(--pink); width:0; transition:.2s; }
     .prompt { text-align:center; font-size:clamp(28px,8vw,42px); font-weight:900; margin:18px 0; overflow-wrap:anywhere; }
-    .draw-wrap { background:white; border:3px solid var(--ink); border-radius:16px; overflow:hidden; touch-action:none; }
-    canvas { display:block; width:100%; aspect-ratio:1; touch-action:none; background:white; }
+    .draw-wrap { background:white; border:3px solid var(--ink); border-radius:16px; overflow:hidden; touch-action:none; overscroll-behavior:contain; }
+    canvas { display:block; width:100%; aspect-ratio:1; touch-action:none; user-select:none; -webkit-user-select:none; background:white; }
     .tools { display:flex; gap:8px; margin-top:10px; }
     .tool { flex:1; border:2px solid var(--ink); border-radius:10px; background:white; min-height:44px; }
     .color { width:56px; height:44px; border:2px solid var(--ink); border-radius:10px; padding:4px; }
@@ -248,16 +248,21 @@
       show('action');
     }
 
-    let canvas, ctx, drawing = false, strokes = [];
+    let canvas, ctx, drawing = false, activePointerId = null, strokes = [];
     function setupCanvas() {
       canvas = $('drawing');
       ctx = canvas.getContext('2d');
+      drawing = false;
+      activePointerId = null;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       strokes = [];
       canvas.onpointerdown = (event) => {
+        if (activePointerId !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+        event.preventDefault();
+        activePointerId = event.pointerId;
         canvas.setPointerCapture(event.pointerId);
         drawing = true;
         strokes.push(ctx.getImageData(0,0,canvas.width,canvas.height));
@@ -266,18 +271,35 @@
         ctx.moveTo(p.x,p.y);
       };
       canvas.onpointermove = (event) => {
-        if (!drawing) return;
+        if (!drawing || event.pointerId !== activePointerId) return;
+        event.preventDefault();
         ctx.strokeStyle = $('color').value;
         ctx.lineWidth = 10;
-        const p = point(event);
-        ctx.lineTo(p.x,p.y);
+        const coalesced = event.getCoalescedEvents ? event.getCoalescedEvents() : [];
+        const samples = coalesced.length ? coalesced : [event];
+        samples.forEach(sample => {
+          const p = point(sample);
+          ctx.lineTo(p.x,p.y);
+        });
         ctx.stroke();
       };
-      canvas.onpointerup = canvas.onpointercancel = () => { drawing=false; ctx.closePath(); };
+      const endStroke = (event) => {
+        if (event.pointerId !== activePointerId) return;
+        event.preventDefault();
+        drawing = false;
+        activePointerId = null;
+        ctx.closePath();
+      };
+      canvas.onpointerup = canvas.onpointercancel = endStroke;
     }
     function point(event) {
       const rect = canvas.getBoundingClientRect();
-      return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height };
+      const x = (event.clientX - rect.left) * canvas.width / rect.width;
+      const y = (event.clientY - rect.top) * canvas.height / rect.height;
+      return {
+        x: Math.max(0, Math.min(canvas.width, x)),
+        y: Math.max(0, Math.min(canvas.height, y))
+      };
     }
     $('undo').addEventListener('click', () => {
       if (!strokes.length) return;
