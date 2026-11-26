@@ -61,11 +61,13 @@
     .chain-item img { width:100%; max-height:300px; object-fit:contain; border:2px solid #dfe3ea; border-radius:12px; }
     .pager { display:flex; gap:10px; }
     .hidden { display:none !important; }
+    #save-status { min-height:1.4em; margin:0 0 12px; text-align:center; font-size:14px; }
   </style>
 </head>
 <body>
   <main class="app">
     <header><div class="logo">Draw<span>phone</span></div></header>
+    <p id="save-status" class="muted" role="status" aria-live="polite"></p>
 
     <section id="setup" class="screen active">
       <div class="card">
@@ -135,6 +137,7 @@
     function show(id) {
       screens.forEach(name => $(name).classList.toggle('active', name === id));
       window.scrollTo(0, 0);
+      saveGame();
     }
 
     let names = [];
@@ -143,6 +146,111 @@
     let chains = [];
     let gameMode = 'parallel';
     let starterIndex = 0;
+    const SAVE_KEY = 'drawphone-game-v1';
+    let restoredCanvasData = null;
+    let pendingCanvasRestore = false;
+    let saveTimer;
+
+    function setSaveStatus(message) {
+      $('save-status').textContent = message;
+    }
+
+    function currentScreen() {
+      return screens.find(name => $(name).classList.contains('active')) || 'setup';
+    }
+
+    function saveGame() {
+      if (!tasks.length || !names.length) return;
+      const screen = currentScreen();
+      const task = tasks[taskIndex];
+      let draft = null;
+      if (screen === 'action' && task) {
+        draft = {
+          prompt: $('prompt-input').value,
+          guess: $('guess-input').value
+        };
+        if (task.kind === 'draw') {
+          draft.color = $('color').value;
+          draft.canvas = pendingCanvasRestore && restoredCanvasData
+            ? restoredCanvasData
+            : $('drawing').toDataURL('image/png');
+        }
+      }
+      const state = { version:1, screen, names, tasks, taskIndex, chains, gameMode, starterIndex, draft };
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+        setSaveStatus('Progress saves automatically on this device.');
+      } catch (error) {
+        setSaveStatus('Could not save this game on this device. Avoid refreshing until storage is available.');
+      }
+    }
+
+    function scheduleSave() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveGame, 150);
+    }
+
+    function isValidSavedGame(state) {
+      return state && state.version === 1 &&
+        Array.isArray(state.names) && state.names.length > 0 &&
+        state.names.every(name => typeof name === 'string') &&
+        Array.isArray(state.tasks) &&
+        Number.isInteger(state.taskIndex) && state.taskIndex >= 0 && state.taskIndex <= state.tasks.length &&
+        Array.isArray(state.chains) &&
+        state.chains.every(chain => chain && Array.isArray(chain.links)) &&
+        ['single','parallel'].includes(state.gameMode) &&
+        Number.isInteger(state.starterIndex) &&
+        ['handoff','action','results'].includes(state.screen) &&
+        state.tasks.every(task => task && ['prompt','draw','guess'].includes(task.kind) &&
+          Number.isInteger(task.player) && task.player >= 0 && task.player < state.names.length &&
+          Number.isInteger(task.chain) && task.chain >= 0 && task.chain < state.chains.length) &&
+        state.chains.every(chain => chain.links.every(link => link &&
+          ((link.kind === 'word' && typeof link.text === 'string') ||
+            (link.kind === 'drawing' && typeof link.data === 'string')) &&
+          Number.isInteger(link.player) && link.player >= 0 && link.player < state.names.length)) &&
+        ((state.screen === 'results' && state.taskIndex === state.tasks.length) ||
+          (state.screen !== 'results' && state.taskIndex < state.tasks.length));
+    }
+
+    function restoreGame() {
+      let state;
+      try {
+        const saved = localStorage.getItem(SAVE_KEY);
+        if (!saved) return;
+        state = JSON.parse(saved);
+      } catch (error) {
+        setSaveStatus('The saved game could not be read. You can start a new game.');
+        return;
+      }
+      if (!isValidSavedGame(state)) {
+        setSaveStatus('The saved game is incomplete. You can start a new game.');
+        return;
+      }
+
+      names = state.names;
+      tasks = state.tasks;
+      taskIndex = state.taskIndex;
+      chains = state.chains;
+      gameMode = state.gameMode;
+      starterIndex = state.starterIndex;
+      $('game-mode').value = gameMode;
+      $('player-count').value = String(names.length);
+      renderNames();
+      names.forEach((name, index) => { $(`name-${index}`).value = name; });
+      setSaveStatus('Saved game restored. Your progress is saved on this device.');
+
+      if (state.screen === 'action') showAction(state.draft);
+      else if (state.screen === 'results') showResults();
+      else showHandoff();
+    }
+
+    window.addEventListener('pagehide', saveGame);
+    window.addEventListener('beforeunload', event => {
+      if (!tasks.length) return;
+      saveGame();
+      event.preventDefault();
+      event.returnValue = '';
+    });
     function renderNames() {
       const count = Number($('player-count').value);
       const grid = $('names');
@@ -206,6 +314,7 @@
         chains = names.map((name, i) => ({ owner:i, name, links:[] }));
         buildTasks();
       }
+      saveGame();
       showHandoff();
     });
 
@@ -221,7 +330,7 @@
     }
 
     $('ready').addEventListener('click', showAction);
-    function showAction() {
+    function showAction(draft = null) {
       const task = tasks[taskIndex];
       $('turn-label').textContent = `${names[task.player]} · Turn ${taskIndex + 1} of ${tasks.length}`;
       $('action-progress').style.width = `${((taskIndex + 1) / tasks.length) * 100}%`;
@@ -231,17 +340,19 @@
 
       if (task.kind === 'prompt') {
         $('prompt-panel').classList.remove('hidden');
-        $('prompt-input').value = '';
+        $('prompt-input').value = draft?.prompt || '';
         setTimeout(() => $('prompt-input').focus(), 50);
       } else if (task.kind === 'draw') {
         const previous = chains[task.chain].links[task.step - 1];
         $('draw-word').textContent = previous.text;
         $('draw-panel').classList.remove('hidden');
         setupCanvas();
+        $('color').value = draft?.color || '#172033';
+        if (draft?.canvas) restoreCanvas(draft.canvas);
       } else {
         const previous = chains[task.chain].links[task.step - 1];
         $('guess-image').src = previous.data;
-        $('guess-input').value = '';
+        $('guess-input').value = draft?.guess || '';
         $('guess-panel').classList.remove('hidden');
         setTimeout(() => $('guess-input').focus(), 50);
       }
@@ -260,7 +371,7 @@
       ctx.lineJoin = 'round';
       strokes = [];
       canvas.onpointerdown = (event) => {
-        if (activePointerId !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+        if (pendingCanvasRestore || activePointerId !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
         event.preventDefault();
         activePointerId = event.pointerId;
         canvas.setPointerCapture(event.pointerId);
@@ -289,8 +400,27 @@
         drawing = false;
         activePointerId = null;
         ctx.closePath();
+        scheduleSave();
       };
       canvas.onpointerup = canvas.onpointercancel = endStroke;
+    }
+    function restoreCanvas(data) {
+      restoredCanvasData = data;
+      pendingCanvasRestore = true;
+      const image = new Image();
+      image.onload = () => {
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        strokes = [];
+        restoredCanvasData = null;
+        pendingCanvasRestore = false;
+        saveGame();
+      };
+      image.onerror = () => {
+        restoredCanvasData = null;
+        pendingCanvasRestore = false;
+        setSaveStatus('The saved drawing could not be restored. You can continue drawing.');
+      };
+      image.src = data;
     }
     function point(event) {
       const rect = canvas.getBoundingClientRect();
@@ -304,10 +434,12 @@
     $('undo').addEventListener('click', () => {
       if (!strokes.length) return;
       ctx.putImageData(strokes.pop(),0,0);
+      scheduleSave();
     });
     $('clear').addEventListener('click', () => {
       strokes = [];
       ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      scheduleSave();
     });
 
     $('done').addEventListener('click', () => {
@@ -325,6 +457,7 @@
         chains[task.chain].links.push({ kind:'word', text, player:task.player });
       }
       taskIndex++;
+      saveGame();
       showHandoff();
     });
 
@@ -461,7 +594,22 @@
       }
       showHandoff();
     });
-    $('new-players').addEventListener('click', () => show('setup'));
+    $('new-players').addEventListener('click', () => {
+      try {
+        localStorage.removeItem(SAVE_KEY);
+      } catch (error) {
+        setSaveStatus('Could not clear the saved game on this device.');
+      }
+      tasks = [];
+      taskIndex = 0;
+      chains = [];
+      show('setup');
+    });
+
+    ['prompt-input','guess-input','color'].forEach(id => {
+      $(id).addEventListener('input', scheduleSave);
+      $(id).addEventListener('change', scheduleSave);
+    });
 
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && $('action').classList.contains('active')) {
@@ -469,6 +617,8 @@
         $('done').click();
       }
     });
+
+    restoreGame();
   </script>
 </body>
 </html>

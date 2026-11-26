@@ -9,6 +9,8 @@ Choose **Parallel mode** to run every chain through all players at once, or **Si
 
 Open `index.html` directly in a browser, or serve the repository with any static web server.
 
+Game progress is saved automatically in the browser on the device being used, including the current turn and unfinished answers or drawings. Reloading the page restores the game. Progress is local to that browser and can be removed if its site data is cleared.
+
 ## GitHub Pages
 
 1. Push this repository to the `main` branch.
